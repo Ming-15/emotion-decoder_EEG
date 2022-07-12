@@ -4,6 +4,8 @@ import numpy as np
 import scipy.sparse as sp
 import torch
 import scipy.io as sio
+
+
 # eeg_trails = ['de_movingAve1', 'de_movingAve2', 'de_movingAve3', 'de_movingAve4', 'de_movingAve5', 'de_movingAve6', 'de_movingAve7', 'de_movingAve8', 'de_movingAve9', 'de_movingAve10', 'de_movingAve11', 'de_movingAve12', 'de_movingAve13', 'de_movingAve14', 'de_movingAve15']
 # label = [ 1,  0, -1, -1,  0,  1, -1, 0,  1,  1,  0, -1,  0,  1, -1]
 #
@@ -15,7 +17,7 @@ import scipy.io as sio
 #     if data[eeg_trails[i]].shape[1] == data2[eeg_trails[i]].shape[1]:
 #         if data[eeg_trails[i]].shape[1] == data3[eeg_trails[i]].shape[1]:
 #             print('True')
-def load_eeg(data_path,sample_ratio=(0.5,0.25,0.25)):
+def load_eeg(data_path, sample_ratio=(0.5, 0.25, 0.25), for_torch=True):
     # fns = os.listdir(data_path)
     # label = sio.loadmat(os.path.join(data_path,'label.mat'))
     eeg_trails = ['de_movingAve1', 'de_movingAve2', 'de_movingAve3', 'de_movingAve4', 'de_movingAve5', 'de_movingAve6',
@@ -31,7 +33,7 @@ def load_eeg(data_path,sample_ratio=(0.5,0.25,0.25)):
     for i in range(len(label)):
         temp_data = data[eeg_trails[i]]
         all_epoch_label = label[i]
-        temp_data = temp_data.swapaxes(1,0)
+        temp_data = temp_data.swapaxes(1, 0)
         storelist[label_unique.index(all_epoch_label)].append(temp_data)
     tr_labels = []
     val_labels = []
@@ -42,49 +44,253 @@ def load_eeg(data_path,sample_ratio=(0.5,0.25,0.25)):
     nn_2_aclabel = []
     for i in range(len(label_unique)):
         label_one = label_unique[i]
-        nn_2_aclabel.append((i,label_one))
-        labeled_data = np.concatenate(storelist[i],axis=0)
+        nn_2_aclabel.append((i, label_one))
+        labeled_data = np.concatenate(storelist[i], axis=0)
         all_lenth = labeled_data.shape[0]
-        tr_num = int(all_lenth*sample_ratio[0])
-        val_num = int(all_lenth*sample_ratio[1])
-        te_num = int(all_lenth-tr_num-val_num)
+        tr_num = int(all_lenth * sample_ratio[0])
+        val_num = int(all_lenth * sample_ratio[1])
+        te_num = int(all_lenth - tr_num - val_num)
         ids = [i for i in range(all_lenth)]
         np.random.shuffle(ids)
-        tr_sample = labeled_data[ids[:tr_num],:,:]
-        val_sample = labeled_data[ids[tr_num:tr_num+val_num],:,:]
-        te_sample = labeled_data[ids[tr_num+val_num:],:,:]
+        tr_sample = labeled_data[ids[:tr_num], :, :]
+        val_sample = labeled_data[ids[tr_num:tr_num + val_num], :, :]
+        te_sample = labeled_data[ids[tr_num + val_num:], :, :]
         tr.append(tr_sample)
-        tr_labels.extend([i]*tr_num)
+        tr_labels.extend([i] * tr_num)
         val.append(val_sample)
-        val_labels.extend([i]*val_num)
+        val_labels.extend([i] * val_num)
         te.append(te_sample)
-        te_labels.extend([i]*te_num)
-    tr = np.concatenate(tr,axis=0)
-    val = np.concatenate(val,axis=0)
-    te = np.concatenate(te,axis=0)
+        te_labels.extend([i] * te_num)
+    tr = np.concatenate(tr, axis=0)
+    val = np.concatenate(val, axis=0)
+    te = np.concatenate(te, axis=0)
     tr_labels = np.array(tr_labels)
     val_labels = np.array(val_labels)
     te_labels = np.array(te_labels)
     rd = [i for i in range(tr.shape[0])]
     np.random.shuffle(rd)
-    tr = tr[rd,:,:]
-    tr_labels=tr_labels[rd]
-    data_for_load = [tr,val,te]
-    label_data_for_load = [tr_labels,val_labels,te_labels]
+    tr = tr[rd, :, :]
+    tr_labels = tr_labels[rd]
+    data_for_load = [tr, val, te]
+    label_data_for_load = [tr_labels, val_labels, te_labels]
+    if for_torch:
+        for i in range(len(data_for_load)):
+            data_for_load[i] = torch.FloatTensor(data_for_load[i])
+        for i in range(len(label_data_for_load)):
+            label_data_for_load[i] = torch.LongTensor(label_data_for_load[i])
+
+    return data_for_load, label_data_for_load
+
+def load_eeg_for_linear(data_path, sample_ratio=(0.5, 0.25, 0.25), for_torch=True):
+    # fns = os.listdir(data_path)
+    # label = sio.loadmat(os.path.join(data_path,'label.mat'))
+    eeg_trails = ['de_movingAve1', 'de_movingAve2', 'de_movingAve3', 'de_movingAve4', 'de_movingAve5', 'de_movingAve6',
+                  'de_movingAve7', 'de_movingAve8', 'de_movingAve9', 'de_movingAve10', 'de_movingAve11',
+                  'de_movingAve12', 'de_movingAve13', 'de_movingAve14', 'de_movingAve15']
+    label = [1, 0, -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 0, 1, -1]
+    data = sio.loadmat(data_path)
+    label_unique = list(np.unique(label))
+    storelist = []
+    for i in range(len(label_unique)):
+        storelist.append([])
+
+    for i in range(len(label)):
+        temp_data = data[eeg_trails[i]]
+        all_epoch_label = label[i]
+        temp_data = temp_data.swapaxes(1, 0)
+        storelist[label_unique.index(all_epoch_label)].append(temp_data)
+    tr_labels = []
+    val_labels = []
+    te_labels = []
+    tr = []
+    val = []
+    te = []
+    nn_2_aclabel = []
+    for i in range(len(label_unique)):
+        label_one = label_unique[i]
+        nn_2_aclabel.append((i, label_one))
+        labeled_data = np.concatenate(storelist[i], axis=0)
+        all_lenth = labeled_data.shape[0]
+        tr_num = int(all_lenth * sample_ratio[0])
+        val_num = int(all_lenth * sample_ratio[1])
+        te_num = int(all_lenth - tr_num - val_num)
+        ids = [i for i in range(all_lenth)]
+        np.random.shuffle(ids)
+        tr_sample = labeled_data[ids[:tr_num], :, :]
+        val_sample = labeled_data[ids[tr_num:tr_num + val_num], :, :]
+        te_sample = labeled_data[ids[tr_num + val_num:], :, :]
+        tr.append(tr_sample)
+        tr_labels.extend([i] * tr_num)
+        val.append(val_sample)
+        val_labels.extend([i] * val_num)
+        te.append(te_sample)
+        te_labels.extend([i] * te_num)
+    tr = np.concatenate(tr, axis=0)
+    tr = tr.reshape(tr.shape[0],-1)
+    val = np.concatenate(val, axis=0)
+    val = val.reshape(val.shape[0], -1)
+    te = np.concatenate(te, axis=0)
+    te = te.reshape(te.shape[0], -1)
+    tr_labels = np.array(tr_labels)
+    val_labels = np.array(val_labels)
+    te_labels = np.array(te_labels)
+    rd = [i for i in range(tr.shape[0])]
+    np.random.shuffle(rd)
+    tr = tr[rd, :]
+    tr_labels = tr_labels[rd]
+    data_for_load = [tr, val, te]
+    label_data_for_load = [tr_labels, val_labels, te_labels]
+    if for_torch:
+        for i in range(len(data_for_load)):
+            data_for_load[i] = torch.FloatTensor(data_for_load[i])
+        for i in range(len(label_data_for_load)):
+            label_data_for_load[i] = torch.LongTensor(label_data_for_load[i])
+
+    return data_for_load, label_data_for_load
+
+def load_eeg_for_svm(data_path, sample_ratio=(0.5, 0.25, 0.25)):
+    # fns = os.listdir(data_path)
+    # label = sio.loadmat(os.path.join(data_path,'label.mat'))
+    eeg_trails = ['de_movingAve1', 'de_movingAve2', 'de_movingAve3', 'de_movingAve4', 'de_movingAve5', 'de_movingAve6',
+                  'de_movingAve7', 'de_movingAve8', 'de_movingAve9', 'de_movingAve10', 'de_movingAve11',
+                  'de_movingAve12', 'de_movingAve13', 'de_movingAve14', 'de_movingAve15']
+    label = [1, 0, -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 0, 1, -1]
+    data = sio.loadmat(data_path)
+    label_unique = list(np.unique(label))
+    storelist = []
+    for i in range(len(label_unique)):
+        storelist.append([])
+
+    for i in range(len(label)):
+        temp_data = data[eeg_trails[i]]
+        all_epoch_label = label[i]
+        temp_data = temp_data.swapaxes(1, 0)  # 62 channels, n samples, 5 features --> n X 62 X 5
+        storelist[label_unique.index(all_epoch_label)].append(temp_data)
+    tr_labels = []
+    val_labels = []
+    te_labels = []
+    tr = []
+    val = []
+    te = []
+    nn_2_aclabel = []
+    for i in range(len(label_unique)):
+        label_one = label_unique[i]
+        nn_2_aclabel.append((i, label_one))
+        labeled_data = np.concatenate(storelist[i], axis=0)   # gather all samples with the same tag
+        all_lenth = labeled_data.shape[0]
+        tr_num = int(all_lenth * sample_ratio[0])          # randomly split
+        val_num = int(all_lenth * sample_ratio[1])
+        te_num = int(all_lenth - tr_num - val_num)
+        ids = [i for i in range(all_lenth)]
+        np.random.shuffle(ids)
+        tr_sample = labeled_data[ids[:tr_num], :, :]
+        val_sample = labeled_data[ids[tr_num:tr_num + val_num], :, :]
+        te_sample = labeled_data[ids[tr_num + val_num:], :, :]
+        tr.append(tr_sample)
+        tr_labels.extend([i] * tr_num)
+        val.append(val_sample)
+        val_labels.extend([i] * val_num)
+        te.append(te_sample)
+        te_labels.extend([i] * te_num)
+    tr = np.concatenate(tr, axis=0)
+    val = np.concatenate(val, axis=0)
+    te = np.concatenate(te, axis=0)
+    tr_labels = np.array(tr_labels)
+    val_labels = np.array(val_labels)
+    te_labels = np.array(te_labels)
+    rd = [i for i in range(tr.shape[0])]  # shuffle again when you cat different clips
+    np.random.shuffle(rd)
+    tr = tr[rd, :, :]
+    tr_labels = tr_labels[rd]
+    data_for_load = [tr, val, te]
+    label_data_for_load = [tr_labels, val_labels, te_labels]
     for i in range(len(data_for_load)):
-        data_for_load[i] = torch.FloatTensor(data_for_load[i])
-    for i in range(len(label_data_for_load)):
-        label_data_for_load[i] = torch.LongTensor(label_data_for_load[i])
+        sp = data_for_load[i].shape
+        data_for_load[i] = data_for_load[i].reshape((sp[0], sp[1] * sp[2]))
 
-    nodes_num = tr.shape[1]
-    adj = np.ones(shape=(nodes_num,nodes_num))
-    adj = torch.FloatTensor(adj)
+    return data_for_load, label_data_for_load
 
 
+def deal_all_eeg_for_svm(data_fold, sample_ratio=(0.5, 0.25, 0.25)):
+    # fns = os.listdir(data_path)
+    # label = sio.loadmat(os.path.join(data_path,'label.mat'))
+    eeg_trails = ['de_movingAve1', 'de_movingAve2', 'de_movingAve3', 'de_movingAve4', 'de_movingAve5', 'de_movingAve6',
+                  'de_movingAve7', 'de_movingAve8', 'de_movingAve9', 'de_movingAve10', 'de_movingAve11',
+                  'de_movingAve12', 'de_movingAve13', 'de_movingAve14', 'de_movingAve15']
+    label = [1, 0, -1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 0, 1, -1]
+    all_store = []
+    data_fold = ''
+    for dn in os.listdir(data_fold):
+        data_path = os.path.join(data_fold,dn)
 
-    return adj, data_for_load,label_data_for_load
+        data = sio.loadmat(data_path)
+        label_unique = list(np.unique(label))
+        storelist = []
+        for i in range(len(label_unique)):
+            storelist.append([])
+        for i in range(len(label)):
+            temp_data = data[eeg_trails[i]]
+            all_epoch_label = label[i]
+            temp_data = temp_data.swapaxes(1, 0)
+            storelist[label_unique.index(all_epoch_label)].append(temp_data)
+        tr_labels = []
+        val_labels = []
+        te_labels = []
+        tr = []
+        val = []
+        te = []
+        nn_2_aclabel = []
+        for i in range(len(label_unique)):
+            label_one = label_unique[i]
+            nn_2_aclabel.append((i, label_one))
+            labeled_data = np.concatenate(storelist[i], axis=0)
+            all_lenth = labeled_data.shape[0]
+            tr_num = int(all_lenth * sample_ratio[0])
+            val_num = int(all_lenth * sample_ratio[1])
+            te_num = int(all_lenth - tr_num - val_num)
+            ids = [i for i in range(all_lenth)]
+            np.random.shuffle(ids)
+            tr_sample = labeled_data[ids[:tr_num], :, :]
+            val_sample = labeled_data[ids[tr_num:tr_num + val_num], :, :]
+            te_sample = labeled_data[ids[tr_num + val_num:], :, :]
+            tr.append(tr_sample)
+            tr_labels.extend([i] * tr_num)
+            val.append(val_sample)
+            val_labels.extend([i] * val_num)
+            te.append(te_sample)
+            te_labels.extend([i] * te_num)
+        tr = np.concatenate(tr, axis=0)
+        val = np.concatenate(val, axis=0)
+        te = np.concatenate(te, axis=0)
+        tr_labels = np.array(tr_labels)
+        val_labels = np.array(val_labels)
+        te_labels = np.array(te_labels)
+        rd = [i for i in range(tr.shape[0])]
+        np.random.shuffle(rd)
+        tr = tr[rd, :, :]
+        tr_labels = tr_labels[rd]
+        data_for_load = [tr, val, te]
+        label_data_for_load = [tr_labels, val_labels, te_labels]
+        for i in range(len(data_for_load)):
+            sp = data_for_load[i].shape
+            data_for_load[i] = data_for_load[i].reshape((sp[0], sp[1] * sp[2]))
+        all_store.append((data_for_load,label_data_for_load))
+    data = [x[0] for x in all_store]
+    label = [x[1] for x in all_store]
+    tr = np.concatenate([x[0] for x in data], axis=0)
+    val = np.concatenate([x[1] for x in data], axis=0)
+    te = np.concatenate([x[2] for x in data], axis=0)
 
-
+    trl = np.concatenate([x[0] for x in label], axis=0)
+    vall = np.concatenate([x[1] for x in label], axis=0)
+    tel = np.concatenate([x[2] for x in label], axis=0)
+    data_for_load = [tr, val, te]
+    label_data_for_load = [trl, vall, tel]
+    import pickle
+    with open('data/subjects_DE_tr_val_te.pkl','wb') as f:
+        pickle.dump({'data':data_for_load,'label':label_data_for_load},f)
+    f.close()
+    # return data_for_load, label_data_for_load
 
 # def load_data(path="./data/cora/", dataset="cora"):
 #     """Load citation network dataset (cora only for now)"""

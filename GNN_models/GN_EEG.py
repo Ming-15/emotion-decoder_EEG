@@ -86,3 +86,39 @@ class EEG_GAT(nn.Module):
         # x = self.out_att(x)
         # x = F.elu(x)
         # return F.log_softmax(x, dim=1)
+
+class Multi_layers_EEG_GAT(nn.Module):
+    def __init__(self, node_num,nfeat, nhid, nclass, dropout, alpha, nheads):
+        """Dense version of GAT."""
+        super(Multi_layers_EEG_GAT, self).__init__()
+        self.dropout = dropout
+
+        self.attentions = [GraphAttentionLayer(node_num,nfeat, nhid, dropout=dropout, alpha=alpha, concat=True) for _ in range(nheads)]
+        for i, attention in enumerate(self.attentions):
+            self.add_module('attention_{}'.format(i), attention)
+
+        self.nodes_att_ly2 =  GraphAttentionLayer(node_num,nhid*nheads, nhid, dropout=dropout, alpha=alpha, concat=True)
+
+        # self.out_att = GraphAttentionLayer(node_num,nhid * nheads, nclass, dropout=dropout, alpha=alpha, concat=False)
+        self.classifier = nn.Sequential(
+            nn.Linear(in_features=node_num*nhid, out_features=64, bias=True),
+            nn.Dropout(dropout),
+            nn.ELU(),
+            nn.Linear(in_features=64, out_features=64, bias=True),
+            nn.Dropout(dropout),
+            nn.ELU(),
+            nn.Linear(64, nclass),
+            nn.Softmax(dim=-1)
+        )
+
+    def forward(self, x):
+        x = F.dropout(x, self.dropout, training=self.training)
+        x = torch.cat([att(x) for att in self.attentions], dim=x.dim()-1)
+        x = self.nodes_att_ly2(x)
+        x = x.view(x.shape[0],-1)
+        x = self.classifier(x)
+        return x
+        # x = F.dropout(x, self.dropout, training=self.training)
+        # x = self.out_att(x)
+        # x = F.elu(x)
+        # return F.log_softmax(x, dim=1)
